@@ -36,21 +36,20 @@
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels
 #define OLED_RESET     -1 // Reset pin # (or -1 if sharing Arduino reset pin)
 #define SCREEN_ADDRESS 0x3c ///< See datasheet for Address; 0x3D for 128x64, 0x3C for 128x32
+static const uint32_t GPSBaud = 115200;
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+HardwareSerial uart0(0);
 
-Adafruit_BMP280 bmp; // I2C baro
+
+Adafruit_BMP280 bmp; // barometer instance
 Adafruit_Sensor *bmp_temp = bmp.getTemperatureSensor();
 Adafruit_Sensor *bmp_pressure = bmp.getPressureSensor();
 
-Adafruit_ADXL345_Unified accel = Adafruit_ADXL345_Unified(12345); //accel
+Adafruit_ADXL345_Unified accel = Adafruit_ADXL345_Unified(12345); // acceleromater instance
+ITG3200 gyro; // gyroscope instance
+Adafruit_HMC5883_Unified mag = Adafruit_HMC5883_Unified(12345); // magnetometer instance
 
-static const uint32_t GPSBaud = 115200;
-TinyGPSPlus gps;
-HardwareSerial uart0(0);
-
-ITG3200 gyro;
-
-Adafruit_HMC5883_Unified mag = Adafruit_HMC5883_Unified(12345);
+TinyGPSPlus gps; // gps instance
 
 SimpleKalmanFilter baroFilter = SimpleKalmanFilter(3, 3, 0.1);
 
@@ -74,29 +73,12 @@ void loadgpsdata(){
   }
 }
 
-
-
-void setup() {
-  Wire.begin();
-  Serial.begin(115200);
-  uart0.begin(GPSBaud); //start interfaces
-
-  Serial.println("init"); 
-
-  Serial.println("_");
-  Serial.println("│");
-  Serial.println(F("├>ssd1306 init"));
-  Serial.println("│");
-  // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
-  if(!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
+void startDisplay(){
+    if(!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) { // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
+ 
     Serial.print(" SSD1306 allocation failed");
     for(;;); // Don't proceed, loop forever
   }
-
-  // Show initial display buffer contents on the screen --
-  // the library initializes this with an Adafruit splash screen.
-  display.display();
-  delay(2000); // Pause for 2 seconds
 
   // Clear the buffer
   display.clearDisplay();
@@ -109,10 +91,10 @@ void setup() {
 
   display.display();
   delay(2000);
+}
 
-  Serial.println(F("├>BMP280 init"));
-  Serial.println("│");
-  unsigned status;
+void startBaro(){
+    unsigned status;
   status = bmp.begin(0x76);
   
 
@@ -122,10 +104,9 @@ void setup() {
                   Adafruit_BMP280::SAMPLING_X16,    /* Pressure oversampling */
                   Adafruit_BMP280::FILTER_X16,      /* Filtering. */
                   Adafruit_BMP280::STANDBY_MS_500); /* Standby time. */
+}
 
-  Serial.println("├>adxl345 init");
-  Serial.print("│");
-  
+void startAccel(){
   /* Initialise the sensor */
   if(!accel.begin())
   {
@@ -170,15 +151,14 @@ void setup() {
   axcal = axtmp/calCount;
   aycal = aytmp/calCount;
   azcal = aztmp/calCount;
-  delay(2000);
+}
 
-  Serial.println("├>itg 3200 init");
-  Serial.println("│");
+void startGyro(){
   gyro.init();
   gyro.zeroCalibrate(200, 10); //sample 200 times to calibrate and it will take 200*10ms
+}
 
-  Serial.println("├>HMC5883L init");
-  Serial.print("│");
+void startMag(){
   if(!mag.begin())
     {
       /* There was a problem detecting the HMC5883 ... check your connections */
@@ -186,8 +166,9 @@ void setup() {
     }
   Serial.println();
 
+}
 
-  Serial.println("└>gps init");
+void startGPS(); {
   while (uart0.available() > 0)
     if (gps.encode(uart0.read()))
   
@@ -215,6 +196,40 @@ void setup() {
     Serial.println(gps.satellites.value());
     delay(100);
   }
+}
+
+void setup() {
+  Wire.begin();
+  Serial.begin(115200);
+  uart0.begin(GPSBaud); //start serial interfaces
+
+  Serial.println("init"); 
+
+  Serial.println("_");
+  Serial.println("│");
+  Serial.println(F("├>ssd1306 init"));
+  Serial.println("│");
+  startDisplay();
+
+  Serial.println(F("├>BMP280 init"));
+  Serial.println("│");
+  startBaro();
+
+  Serial.println("├>adxl345 init");
+  Serial.print("│");
+  startAccel();
+  
+
+  Serial.println("├>itg 3200 init");
+  Serial.println("│");
+  startGyro();
+
+  Serial.println("├>HMC5883L init");
+  Serial.print("│");
+  startMag();
+
+  Serial.println("└>gps init");
+  startGPS();
 
 }
 
